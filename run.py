@@ -26,12 +26,12 @@ def run_simulation(
         help="Path to the market data pickle file."
     ),
     start_date_str: str = typer.Option(
-        "2022-11-15",
+        "2022-10-06",
         "-s", "--start-date",
         help="Simulation start date in YYYY-MM-DD format."
     ),
     end_date_str: str = typer.Option(
-        "2022-11-17",
+        "2023-04-10",
         "-e", "--end-date",
         help="Simulation end date in YYYY-MM-DD format."
     ),

@@ -556,80 +556,71 @@
 
 
 # (Multi-Persona Investment Committee Version)
-
 import logging
 import json
-from typing import List, Callable, Dict, Any, Tuple
+from typing import List, Callable, Dict, Any, Tuple, Optional
 from enum import Enum 
 
 import guardrails as gd
 from pydantic import BaseModel, Field, condecimal, ValidationError
 
-# --------------------------------------------------------------------------
-# 헬퍼 함수: LLM 호출 및 검증 로직 (최종 수정)
-# --------------------------------------------------------------------------
+
+FAILED_TRADE_ANALYSIS_PROMPT = """
+You are a Chief Risk Officer. The following trade plan resulted in a significant loss. 
+Analyze the original plan and the provided context. Identify the single most likely reason for the failure.
+Was it an overestimation of a catalyst? An underestimation of a risk? A flawed valuation model? 
+Provide a concise one-sentence explanation for the failure.
+
+Original Trade Plan:
+{trade_plan}
+
+Analysis Context Provided at the Time:
+{analysis_context}
+"""
+
+class FailureAnalysis(BaseModel):
+    failure_reason: str = Field(description="A concise, one-sentence explanation for why the trade failed.")
+
+def analyze_failed_trade(endpoint_func: Callable, trade_plan: Dict, analysis_context: str) -> Dict:
+    """실패한 거래의 원인을 분석합니다."""
+    prompt = FAILED_TRADE_ANALYSIS_PROMPT.format(
+        trade_plan=str(trade_plan),
+        analysis_context=analysis_context
+    )
+    return call_llm_and_validate(endpoint_func, FailureAnalysis, prompt)
+
 def call_llm_and_validate(
-    endpoint_func: Callable,
-    output_class: type[BaseModel],
-    prompt: str, # 이제 완성된 프롬프트를 직접 받음
-    num_reasks: int = 1
+    endpoint_func: Callable, output_class: type[BaseModel], prompt: str, num_reasks: int = 1
 ) -> Dict:
-    """
-    LLM을 호출하고, 응답에서 JSON을 직접 추출하여 Pydantic으로 검증합니다.
-    """
     logger = logging.getLogger(__name__)
-    
-    # 1. Pydantic 모델로부터 Guard 객체 생성
     guard = gd.Guard.from_pydantic(output_class=output_class)
-    
-    # 2. LLM에게 JSON 출력을 지시하는 명확한 지시문을 프롬프트에 추가합니다.
     final_prompt = (
         f"{prompt}\n\n"
         "Provide your response strictly in the following JSON format. Do not include any other text or explanations. "
         "The JSON object must be enclosed in a markdown JSON block.\n"
         f"JSON Schema:\n```json\n{output_class.schema_json(indent=2)}\n```"
     )
-    
     try:
-        # 3. LLM 호출
         raw_llm_response = endpoint_func(final_prompt)
-        
-        # 4. LLM 응답에서 JSON 블록만 추출
         try:
             json_str = raw_llm_response.split("```json")[1].split("```")[0].strip()
         except IndexError:
             logger.warning(f"LLM 응답에서 Markdown JSON 블록을 찾지 못했습니다. Raw Response: {raw_llm_response}")
             json_str = raw_llm_response
-
-        # 5. JSON 문자열을 딕셔너리로 파싱하고 Pydantic으로 검증
         parsed_json = json.loads(json_str)
         validated_data = output_class.parse_obj(parsed_json)
-        
         return validated_data.dict()
-
-    except (json.JSONDecodeError, ValidationError) as e:
-        logger.error(f"파싱 또는 검증 오류: {e}. Raw Response: {raw_llm_response}")
-        # Guardrails의 재질의 기능 활용 시도
-        try:
-            raw_llm_response, validated_output = guard(endpoint_func, prompt=final_prompt, num_reasks=num_reasks)
-            return validated_output if validated_output else {"error": "Re-ask failed."}
-        except Exception as reask_e:
-            logger.error(f"재질의 중 오류 발생: {reask_e}")
-            return {"error": str(reask_e)}
     except Exception as e:
-        logger.error(f"LLM 호출 또는 데이터 처리 중 예상치 못한 오류 발생: {e}", exc_info=True)
+        logger.error(f"LLM 호출 또는 파싱 중 오류 발생: {e}", exc_info=True)
         return {"error": str(e)}
 
 
-# --------------------------------------------------------------------------
-# Pydantic 모델 정의
-# --------------------------------------------------------------------------
 class QuantitativeAnalysis(BaseModel):
-    three_year_cagr: float
-    pe_ratio: float
-    ps_ratio: float
-    debt_to_equity: float
-    rd_investment_ratio: float
+    three_year_cagr: Optional[float] = Field(None, description="3-Year revenue Compound Annual Growth Rate (CAGR).")
+    pe_ratio: Optional[float] = Field(None, description="Current Price-to-Earnings (P/E) Ratio.")
+    ps_ratio: Optional[float] = Field(None, description="Current Price-to-Sales (P/S) Ratio.")
+    debt_to_equity: Optional[float] = Field(None, description="Current Debt-to-Equity Ratio.")
+    rd_investment_ratio: Optional[float] = Field(None, description="R&D spending as a percentage of revenue.")
 
 class QualitativeAnalysis(BaseModel):
     competitive_moat: str
@@ -637,9 +628,9 @@ class QualitativeAnalysis(BaseModel):
     short_term_headwinds: List[str]
 
 def _run_foundational_analysis(
-    endpoint_func: Callable, short_mem_texts: str, mid_long_mem_texts: str
+    endpoint_func: Callable, short_mem_texts: str, mid_long_mem_texts: str, initial_context: str
 ) -> Tuple[Dict, Dict]:
-    prompt_quant = f"""
+    prompt_quant = f"""{initial_context}
 Analyze the provided financial reports (10-K, 10-Q) and extract or calculate the following metrics for the company.
 - 3-Year revenue Compound Annual Growth Rate (CAGR).
 - Current Price-to-Earnings (P/E) Ratio.
@@ -652,7 +643,7 @@ Financial Reports:
 """
     quant_analysis = call_llm_and_validate(endpoint_func, QuantitativeAnalysis, prompt_quant)
 
-    prompt_qual = f"""
+    prompt_qual = f"""{initial_context}
 Analyze the recent news and filings (e.g., 8-K) and summarize the key qualitative factors.
 - What is the company's primary competitive moat?
 - What are the most significant short-term catalysts (positive news)?
@@ -663,6 +654,7 @@ Recent News & Filings:
 """
     qual_analysis = call_llm_and_validate(endpoint_func, QualitativeAnalysis, prompt_qual)
     return quant_analysis, qual_analysis
+
 
 class ValueInvestorAnalysis(BaseModel):
     intrinsic_value_assessment: str
@@ -680,7 +672,7 @@ class TechnicalTraderAnalysis(BaseModel):
     key_resistance_level: float
     
 def _run_persona_analysis(
-    endpoint_func: Callable, quant_analysis: Dict, qual_analysis: Dict
+    endpoint_func: Callable, quant_analysis: Dict, qual_analysis: Dict, initial_context: str
 ) -> Dict[str, Dict]:
     personas = {
         "Value Investor": {"philosophy": "Buy wonderful companies at a fair price.", "model": ValueInvestorAnalysis},
@@ -689,7 +681,7 @@ def _run_persona_analysis(
     }
     results = {}
     for name, config in personas.items():
-        prompt = f"""
+        prompt = f"""{initial_context}
 You are a {name}. Your investment philosophy is: "{config['philosophy']}"
 Based on the foundational analysis below, provide your specific insights for the stock.
 
@@ -706,8 +698,9 @@ class DebateSummary(BaseModel):
     strongest_argument: str
     simulated_qa: str
 
-def _run_committee_debate(endpoint_func: Callable, persona_analyses: Dict) -> Dict:
-    prompt = f"""
+def _run_committee_debate(endpoint_func: Callable, persona_analyses: Dict, initial_context: str) -> Dict:
+    # ... (내부 로직은 동일, prompt에 initial_context 추가) ...
+    prompt = f"""{initial_context}
 As the Chief Investment Officer (CIO), your job is to moderate a debate between your top analysts.
 Here are their reports on the stock:
 1.  **Value Investor's Report**: {persona_analyses.get("Value Investor", {})}
@@ -721,6 +714,20 @@ Your tasks:
 
 Synthesize this debate into a structured summary."""
     return call_llm_and_validate(endpoint_func, DebateSummary, prompt)
+
+
+FINAL_PLAN_PROMPT = """
+As the Chief Investment Officer (CIO), you must make the final decision.
+Synthesize all the prior analysis and the committee debate to formulate a concrete, actionable trade plan for the stock.
+
+- **Foundational Analysis**: {quant_analysis}
+- **Persona Analyses**: {persona_analyses}
+- **Committee Debate Summary**: {debate_summary}
+- **List of Available Document IDs for Reference**: {available_doc_ids}
+
+Based on all available information, construct the final plan.
+**Crucially, for the 'supporting_document_ids' field, you MUST select up to 3 of the most relevant IDs ONLY from the 'List of Available Document IDs for Reference' provided above.** Be decisive. This is a strict requirement.
+"""
 
 class InvestmentDecisionEnum(str, Enum):
     BUY = "buy"
@@ -740,15 +747,21 @@ class ActionableTradePlan(BaseModel):
 
 def _formulate_final_plan(
     endpoint_func: Callable, quant_analysis: Dict, qual_analysis: Dict,
-    persona_analyses: Dict, debate_summary: Dict
+    persona_analyses: Dict, debate_summary: Dict,
+    available_doc_ids: List[int], initial_context: str
 ) -> Dict:
-    prompt = f"""
+    prompt = f"""{initial_context}
 As the Chief Investment Officer (CIO), you must make the final decision.
 Synthesize all the prior analysis and the committee debate to formulate a concrete, actionable trade plan for the stock.
+
 - **Foundational Analysis**: {quant_analysis}
 - **Persona Analyses**: {persona_analyses}
 - **Committee Debate Summary**: {debate_summary}
-Based on everything, construct the final plan. Be decisive."""
+- **List of Available Document IDs for Reference**: {available_doc_ids}
+
+Based on all available information, construct the final plan.
+**Crucially, for the 'supporting_document_ids' field, you MUST select up to 3 of the most relevant IDs ONLY from the 'List of Available Document IDs for Reference' provided above.** Be decisive.
+"""
     
     validated_output = call_llm_and_validate(endpoint_func, ActionableTradePlan, prompt)
     
@@ -760,6 +773,7 @@ def run_investment_committee_analysis(
     endpoint_func: Callable[[str], str],
     short_memory_texts_with_ids: List[Tuple[int, str]],
     mid_long_memory_texts_with_ids: List[Tuple[int, str]],
+    initial_context: str, # "오답 노트"를 전달받는 인자
 ) -> Dict[str, Any]:
     logger = logging.getLogger(__name__)
     full_analysis_report = {}
@@ -772,24 +786,30 @@ def run_investment_committee_analysis(
     
     try:
         logger.info("단계 1: 기초 자산 분석 실행 중...")
-        quant_analysis, qual_analysis = _run_foundational_analysis(endpoint_func, short_mem_for_prompt, mid_long_mem_for_prompt)
+        quant_analysis, qual_analysis = _run_foundational_analysis(endpoint_func, short_mem_for_prompt, mid_long_mem_for_prompt, initial_context)
         full_analysis_report["foundational_analysis"] = {"quantitative": quant_analysis, "qualitative": qual_analysis}
-        if "error" in quant_analysis or "error" in qual_analysis: raise ValueError(f"기초 분석 실패: {quant_analysis.get('error') or qual_analysis.get('error')}")
+        if "error" in quant_analysis or "error" in qual_analysis: raise ValueError("기초 분석 실패")
 
         logger.info("단계 2: 페르소나별 심층 분석 실행 중...")
-        persona_analyses = _run_persona_analysis(endpoint_func, quant_analysis, qual_analysis)
+        persona_analyses = _run_persona_analysis(endpoint_func, quant_analysis, qual_analysis, initial_context)
         full_analysis_report["persona_analyses"] = persona_analyses
-        if any("error" in r for r in persona_analyses.values()): raise ValueError("페르소나 분석 중 하나 이상이 실패했습니다.")
+        if any("error" in r for r in persona_analyses.values()): raise ValueError("페르소나 분석 실패")
 
         logger.info("단계 3: 투자 위원회 토론 시뮬레이션 중...")
-        debate_summary = _run_committee_debate(endpoint_func, persona_analyses)
+        debate_summary = _run_committee_debate(endpoint_func, persona_analyses, initial_context)
         full_analysis_report["committee_debate"] = debate_summary
-        if "error" in debate_summary: raise ValueError(f"위원회 토론 실패: {debate_summary.get('error')}")
+        if "error" in debate_summary: raise ValueError("위원회 토론 실패")
 
         logger.info("단계 4: 최종 투자 집행 계획 수립 중...")
-        final_plan = _formulate_final_plan(endpoint_func, quant_analysis, qual_analysis, persona_analyses, debate_summary)
+        all_doc_ids = [doc_id for doc_id, text in short_memory_texts_with_ids + mid_long_memory_texts_with_ids]
+        final_plan = _formulate_final_plan(
+            endpoint_func, quant_analysis, qual_analysis, 
+            persona_analyses, debate_summary,
+            available_doc_ids=all_doc_ids,
+            initial_context=initial_context
+        )
         full_analysis_report["final_actionable_plan"] = final_plan
-        if "error" in final_plan: raise ValueError(f"최종 계획 수립 실패: {final_plan.get('error')}")
+        if "error" in final_plan: raise ValueError("최종 계획 수립 실패")
         
         logger.info("모든 분석 단계가 성공적으로 완료되었습니다.")
         return full_analysis_report

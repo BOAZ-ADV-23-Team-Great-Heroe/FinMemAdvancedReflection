@@ -3,9 +3,10 @@
 set -e
 
 # --- 파라미터 설정 ---
-START_DATE=${1:-"2022-11-15"}
-END_DATE=${2:-"2023-06-17"}
+START_DATE=${1:-"2022-10-06"}
+END_DATE=${2:-"2023-04-10"}
 OUTPUT_PATH=${3:-"data/05_model_output/tsla_default_run"}
+
 
 # 사용할 설정 파일과 데이터 파일 경로
 CONFIG_FILE="config/tsla_gpt_config.toml"
@@ -15,7 +16,7 @@ MARKET_DATA_FILE="data/03_model_input/add_filing_tsla.pkl"
 echo "=================================================="
 echo "Starting FinMem Simulation"
 echo "--------------------------------------------------"
-echo "Trading Symbol: TSLA (from config)"
+echo "Trading Symbol: (from config)"
 echo "Config File:    $CONFIG_FILE"
 echo "Market Data:    $MARKET_DATA_FILE"
 echo "Simulation Period: $START_DATE to $END_DATE"
