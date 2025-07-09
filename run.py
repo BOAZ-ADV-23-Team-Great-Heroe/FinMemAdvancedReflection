@@ -12,7 +12,7 @@ from puppy import MarketEnvironment, LLMAgent
 
 # 경고 메시지를 무시합니다.
 warnings.filterwarnings("ignore")
-load_dotenv()
+load_dotenv(override=True)
 
 def run_simulation(
     config_path: str = typer.Option(

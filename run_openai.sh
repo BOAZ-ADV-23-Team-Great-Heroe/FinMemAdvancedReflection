@@ -3,14 +3,14 @@
 set -e
 
 # --- 파라미터 설정 ---
-START_DATE=${1:-"2022-10-06"}
-END_DATE=${2:-"2023-04-10"}
-OUTPUT_PATH=${3:-"data/05_model_output/tsla_default_run"}
+START_DATE=${1:-"2021-11-16"}
+END_DATE=${2:-"2025-06-11"}
+OUTPUT_PATH=${3:-"data/05_model_output/nvda_4o_mini_run"}
 
 
 # 사용할 설정 파일과 데이터 파일 경로
-CONFIG_FILE="config/tsla_gpt_config.toml"
-MARKET_DATA_FILE="data/03_model_input/add_filing_tsla.pkl"
+CONFIG_FILE="config/nvda_gpt_config.toml"
+MARKET_DATA_FILE="data/03_model_input/add_filing_nvda.pkl"
 
 
 echo "=================================================="
@@ -39,7 +39,7 @@ echo "=================================================="
 
 
  python save_file.py \
-    --output-path data/05_model_output/tsla_default_run \
-    --portfolio-out tsla_portfolio_new.csv \
-    --analysis-out tsla_full_report.json \
-    --performance-out tsla_performance.json
+    --output-path data/05_model_output/nvda_4o_mini_run \
+    --portfolio-out nvda_portfolio_4o_mini.csv \
+    --analysis-out nvda_full_report__4o_mini.json \
+    --performance-out nvda_performance__4o_mini.json

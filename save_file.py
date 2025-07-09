@@ -88,7 +88,6 @@ def save_simulation_results(
         }
         
         with open(analysis_json_path, 'w', encoding='utf-8') as f:
-            # --- 최종 수정된 부분: 확장된 CustomEncoder 사용 ---
             json.dump(report_for_json, f, ensure_ascii=False, indent=4, cls=CustomEncoder)
         print(f"✅ 전체 분석 리포트 저장 완료!")
 

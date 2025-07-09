@@ -15,7 +15,7 @@ from .reflection import run_investment_committee_analysis, analyze_failed_trade
 from transformers import AutoTokenizer
 
 class TextTruncator:
-    def __init__(self, tokenizer_name="roberta-base", max_length=512):
+    def __init__(self, tokenizer_name="roberta-base", max_length=8192):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_length = max_length
 
@@ -37,6 +37,7 @@ class LLMAgent(Agent):
         agent_name: str, trading_symbol: str, brain_db: BrainDB,
         chat_config: Dict[str, Any], portfolio_config: Dict[str, Any], 
         top_k: int = 7, look_back_window_size: int = 7,
+        truncation_max_length: int = 8192
     ):
         self.counter = 1
         self.top_k = top_k
@@ -61,17 +62,12 @@ class LLMAgent(Agent):
         )
         
         self.chat_config_save = chat_config.copy()
-        chat_config_copy = chat_config.copy()
-        end_point = chat_config_copy.pop("end_point")
-        model = chat_config_copy.pop("model")
-        system_message = chat_config_copy.pop("system_message")
-        self.endpoint_func = ChatOpenAICompatible(
-            end_point=end_point, model=model, system_message=system_message,
-            other_parameters=chat_config_copy,
-        ).guardrail_endpoint()
+        self.base_system_message = chat_config.pop("system_message")
+        self.endpoint_func = None # step에서 동적으로 생성
         self.reflection_result_series_dict = {}
+        self.truncator = TextTruncator(max_length=truncation_max_length)
         self.failure_memory: List[str] = []
-        self.truncator = TextTruncator()
+        self.consecutive_losses = 0
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "LLMAgent":
@@ -83,6 +79,7 @@ class LLMAgent(Agent):
             chat_config=config["chat"],
             portfolio_config=config.get("portfolio", {}),
             look_back_window_size=config["general"].get("look_back_window_size", 7),
+            truncation_max_length=config["general"].get("truncation_max_length", 8192)
         )
 
     def _handling_news(self, cur_date: date, news: Union[List[str], None]) -> None:
@@ -107,13 +104,32 @@ class LLMAgent(Agent):
     def _reflect(self, cur_date: date) -> None:
         self.logger.info(f"'{self.trading_symbol}'에 대한 투자 위원회 분석 시작 (날짜: {cur_date})")
         
-        # --- 최종 수정: 실패 기록을 프롬프트에 주입 ---
-        recent_failures = "\n".join(self.failure_memory[-3:]) # 최근 3개의 실패 기록을 가져옴
-        initial_context = ""
+        # 1-1. 시장 국면 분석
+        market_regime = self.portfolio.get_market_regime()
+        regime_warning = ""
+        if market_regime == "Bear":
+            regime_warning = "**CRITICAL ALERT: The market is in a confirmed Bearish trend. Prioritize capital preservation. Be extremely skeptical of bullish narratives. Your default bias should be 'HOLD' or 'SELL'.**\n"
+        elif market_regime == "Bull":
+             regime_warning = "**Market Insight: The market is in a confirmed Bullish trend. Your primary focus is profit maximization. Actively seek compelling growth opportunities.**\n"
+        
+        # 1-2. "오답 노트" 준비
+        recent_failures = "\n".join(self.failure_memory[-3:])
+        failure_context = ""
         if recent_failures:
-            initial_context = f"Before you begin, consider these lessons from recent failed trades:\n{recent_failures}\n---\n"
-        # ----------------------------------------------------
+            failure_context = f"Before you begin, review and learn from these recent failed trades:\n{recent_failures}\n"
 
+        # 1-3. 최종 컨텍스트 결합
+        initial_context = regime_warning + failure_context + ("---\n" if (regime_warning or failure_context) else "")
+
+        # 엔드포인트 함수를 동적 시스템 메시지로 재생성
+        chat_config_copy = self.chat_config_save.copy()
+        end_point = chat_config_copy.pop("end_point")
+        model = chat_config_copy.pop("model")
+        self.endpoint_func = ChatOpenAICompatible(
+            end_point=end_point, model=model, system_message=self.base_system_message,
+            other_parameters=chat_config_copy,
+        ).guardrail_endpoint()
+     
         persona_queries = {
             "value": "financial health, debt, cash flow, intrinsic value, margin of safety",
             "growth": "new products, market share, innovation, user growth, future catalyst",
@@ -145,6 +161,13 @@ class LLMAgent(Agent):
             self.logger.warning(f"{cur_date}: 분석 실패 또는 오류로 '보유(hold)' 결정")
             return {"investment_decision": "hold", "position_sizing": 0.0}
         
+        # --- 행동 강제 (Circuit Breaker) 로직 추가 ---
+        if self.consecutive_losses >= 3 and final_plan.get("investment_decision") == "buy":
+            self.logger.warning(f"CIRCUIT BREAKER ENGAGED: 3회 연속 손실로 '매수' 결정을 강제로 '보유'로 변경합니다.")
+            final_plan["investment_decision"] = "hold"
+            final_plan["primary_reason"] = "Circuit breaker triggered due to repeated losses. Overriding buy decision to manage risk."
+        # ----------------------------------------------------------
+
         return {
             "investment_decision": final_plan.get("investment_decision", "hold"),
             "position_sizing": float(final_plan.get("position_sizing", 0.0))
@@ -154,6 +177,9 @@ class LLMAgent(Agent):
         feedback = self.portfolio.get_feedback_response()
         if not feedback: return
 
+        if feedback["feedback"] == 1:
+            self.consecutive_losses = 0 # 성공 시, 연속 손실 카운터 리셋
+        
         cur_date = feedback["date"]
         cur_reflection = self.reflection_result_series_dict.get(cur_date)
         if not cur_reflection: return
@@ -161,16 +187,14 @@ class LLMAgent(Agent):
         final_plan = cur_reflection.get("final_actionable_plan")
         if not final_plan: return
             
-        # --- 최종 수정: 실패 시, 실패 원인 분석 및 기록 ---
         if feedback["feedback"] == -1:
-            # 실패 원인 분석
-            analysis_context = str(cur_reflection.get("foundational_analysis", {})) + str(cur_reflection.get("persona_analyses", {}))
+            self.consecutive_losses += 1 # 실패 시, 연속 손실 카운터 증가
+            analysis_context = str(cur_reflection)
             failure_analysis_result = analyze_failed_trade(self.endpoint_func, final_plan, analysis_context)
             if reason := failure_analysis_result.get("failure_reason"):
                 self.logger.warning(f"실패 원인 분석 완료: {reason}")
                 self.failure_memory.append(f"- On {cur_date}, a '{final_plan.get('investment_decision')}' decision failed. Reason: {reason}")
-        # ----------------------------------------------------
-
+        
         if doc_ids := final_plan.get("supporting_document_ids"):
             if not doc_ids: return
             self.logger.info(f"피드백({feedback['feedback']})에 따라 문서 ID {doc_ids}의 중요도를 업데이트합니다.")
@@ -205,7 +229,6 @@ class LLMAgent(Agent):
         os.makedirs(os.path.join(path, "brain"), exist_ok=True)
         
         state_to_save = self.__dict__.copy()
-        # 순환 참조 및 재생성 가능한 객체 제외
         del state_to_save['logger'], state_to_save['endpoint_func'], state_to_save['truncator'], state_to_save['brain']
         
         with open(os.path.join(path, "state_dict.pkl"), "wb") as f:
@@ -225,11 +248,15 @@ class LLMAgent(Agent):
             agent_name=state_dict["agent_name"], trading_symbol=state_dict["trading_symbol"],
             brain_db=brain, chat_config=state_dict["chat_config_save"],
             portfolio_config=portfolio_config, top_k=state_dict.get("top_k", 7),
-            look_back_window_size=state_dict.get("look_back_window_size", 7)
+            look_back_window_size=state_dict.get("look_back_window_size", 7),
+            truncation_max_length=state_dict.get("truncator").max_length if "truncator" in state_dict else 8192
         )
         
         for key, value in state_dict.items():
-            if key not in ['brain', 'portfolio_config', 'chat_config_save']:
+            if key not in ['brain', 'portfolio_config', 'chat_config_save', 'truncator']:
                 setattr(agent, key, value)
+        
+        agent.failure_memory = state_dict.get("failure_memory", [])
+        agent.consecutive_losses = state_dict.get("consecutive_losses", 0)
                 
         return agent

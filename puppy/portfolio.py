@@ -6,10 +6,6 @@ from typing import Dict, List, Union
 class Portfolio:
     """
     고도화된 포트폴리오 관리 클래스.
-    - 현금, 주식, 총자산 가치 관리
-    - 비율 기반 포지션 사이징 및 거래 비용(수수료) 시뮬레이션
-    - 일별 포트폴리오 가치 및 수익률 기록
-    - 전문적인 성과 지표 (샤프 지수, 최대 낙폭) 계산
     """
     def __init__(
         self,
@@ -32,31 +28,46 @@ class Portfolio:
         self.date_series: List[date] = []
         self.action_history: List[Dict] = []
         self.value_history: List[float] = [initial_capital]
+        self.price_history: List[float] = [] 
 
     def update_market_info(self, new_market_price: float, cur_date: date) -> None:
         """새로운 시장 가격과 날짜를 받아 포트폴리오 상태를 업데이트합니다."""
         self.cur_date = cur_date
         self.market_price = new_market_price
         self.date_series.append(cur_date)
+        self.price_history.append(new_market_price) 
 
         current_stock_value = self.holding_shares * self.market_price
         self.total_value = self.cash + current_stock_value
         self.value_history.append(self.total_value)
 
+    # 시장 국면 분석 기능 
+    def get_market_regime(self, short_window: int = 20, long_window: int = 50) -> str:
+        """
+        이동평균선을 이용해 현재 시장 국면을 'Bull', 'Bear', 'Neutral'로 판단합니다.
+        """
+        if len(self.price_history) < long_window:
+            return "Neutral" # 데이터가 충분하지 않으면 중립
+
+        prices = np.array(self.price_history)
+        short_ma = np.mean(prices[-short_window:])
+        long_ma = np.mean(prices[-long_window:])
+
+        if short_ma > long_ma * 1.01: # 단기 이평선이 장기 이평선보다 1% 이상 높으면 상승장
+            return "Bull"
+        elif short_ma < long_ma * 0.99: # 단기 이평선이 장기 이평선보다 1% 이상 낮으면 하락장
+            return "Bear"
+        else:
+            return "Neutral"
+
     def _calculate_trade_quantity(self, position_sizing: float) -> int:
-        """
-        포지션 사이징 비율에 따라 거래할 주식 수를 계산합니다.
-        """
-        if self.market_price <= 0:
-            return 0
-        # +++ 최종 수정된 부분: position_sizing을 float으로 변환하여 타입 오류 해결 +++
+        """포지션 사이징 비율에 따라 거래할 주식 수를 계산합니다."""
+        if self.market_price <= 0: return 0
         target_amount = self.total_value * float(position_sizing)
         return int(target_amount // self.market_price)
 
     def record_action(self, action: Dict[str, Union[str, float]]) -> None:
-        """
-        ActionableTradePlan을 받아 거래를 실행하고 자산을 업데이트합니다.
-        """
+        """ActionableTradePlan을 받아 거래를 실행하고 자산을 업데이트합니다."""
         decision = action.get("investment_decision")
         position_sizing = float(action.get("position_sizing", 0.0))
 
