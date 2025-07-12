@@ -197,9 +197,9 @@ class LLMAgent(Agent):
     def step(self, market_info: market_info_type) -> None:
         cur_date, cur_price, cur_news, cur_filing_k, cur_filing_q, is_done = market_info
         
-        if is_done:
-            self.logger.info("시뮬레이션의 마지막 스텝입니다. 종료합니다.")
-            return
+        # if is_done:
+        #     self.logger.info("시뮬레이션의 마지막 스텝입니다. 종료합니다.")
+        #     return
 
         self.logger.info(f"=== 스텝 {self.counter} 시작 (날짜: {cur_date}) ===")
         

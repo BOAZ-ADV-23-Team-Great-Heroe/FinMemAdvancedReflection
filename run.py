@@ -106,15 +106,16 @@ def run_simulation(
     with tqdm(total=environment.simulation_length, initial=the_agent.counter - 1, desc="Simulating Agent") as pbar:
         while True:
             market_info = environment.step()
-            if market_info[-1]:
-                logger.info("시뮬레이션 기간의 마지막에 도달했습니다.")
-                break
-            
             the_agent.step(market_info=market_info)
             pbar.update(1)
             
             the_agent.save_checkpoint(path=agent_checkpoint_path, force=True)
             environment.save_checkpoint(path=env_checkpoint_path, force=True)
+            if market_info[-1]:
+                logger.info("시뮬레이션 기간의 마지막에 도달했습니다.")
+                break
+            
+
 
     logger.info("시뮬레이션이 성공적으로 완료되었습니다.")
     logger.info(f"최종 결과 및 체크포인트가 '{output_path}'에 저장되었습니다.")
