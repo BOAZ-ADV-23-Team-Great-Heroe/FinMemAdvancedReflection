@@ -161,13 +161,6 @@ class LLMAgent(Agent):
             self.logger.warning(f"{cur_date}: 분석 실패 또는 오류로 '보유(hold)' 결정")
             return {"investment_decision": "hold", "position_sizing": 0.0}
         
-        # --- 행동 강제 (Circuit Breaker) 로직 추가 ---
-        if self.consecutive_losses >= 3 and final_plan.get("investment_decision") == "buy":
-            self.logger.warning(f"CIRCUIT BREAKER ENGAGED: 3회 연속 손실로 '매수' 결정을 강제로 '보유'로 변경합니다.")
-            final_plan["investment_decision"] = "hold"
-            final_plan["primary_reason"] = "Circuit breaker triggered due to repeated losses. Overriding buy decision to manage risk."
-        # ----------------------------------------------------------
-
         return {
             "investment_decision": final_plan.get("investment_decision", "hold"),
             "position_sizing": float(final_plan.get("position_sizing", 0.0))
