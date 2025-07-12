@@ -40,6 +40,11 @@ def run_simulation(
         "-o", "--output-path",
         help="Directory to save all checkpoints and final results. Resumes from here if checkpoints exist."
     ),
+    update_market_data: bool = typer.Option(
+        False,
+        "--update-market",
+        help="에이전트는 유지하고, 새로운 시장 데이터로 환경을 업데이트하여 재개합니다."
+    ),
 ):
     """
     에이전트 시뮬레이션을 시작하거나 체크포인트에서 재개합니다.
@@ -62,7 +67,26 @@ def run_simulation(
     agent_checkpoint_path = os.path.join(output_path, "agent")
     env_checkpoint_path = os.path.join(output_path, "env")
 
-    if os.path.exists(agent_checkpoint_path) and os.path.exists(env_checkpoint_path):
+    if update_market_data:
+        logger.info("🔄 데이터 업데이트 모드로 실행합니다: 에이전트는 복구하고 환경은 새로 구성합니다.")
+        if not os.path.exists(agent_checkpoint_path):
+            logger.error(f"❌ 오류: 에이전트 체크포인트를 찾을 수 없습니다. 먼저 일반 모드로 시뮬레이션을 실행하세요.", fg=typer.colors.RED)
+            raise typer.Exit()
+            
+        the_agent = LLMAgent.load_checkpoint(path=agent_checkpoint_path)
+        
+        with open(market_data_path, "rb") as f:
+            env_data_pkl = pickle.load(f)
+        
+        environment = MarketEnvironment(
+            symbol=config["general"]["trading_symbol"],
+            env_data_pkl=env_data_pkl,
+            start_date=datetime.strptime(start_date_str, "%Y-%m-%d").date(),
+            end_date=datetime.strptime(end_date_str, "%Y-%m-%d").date(),
+        )
+        environment.current_step = the_agent.counter - 1
+        
+    elif os.path.exists(agent_checkpoint_path) and os.path.exists(env_checkpoint_path):
         logger.info(f"'{output_path}'에서 체크포인트를 발견했습니다. 시뮬레이션을 재개합니다.")
         environment = MarketEnvironment.load_checkpoint(path=env_checkpoint_path)
         the_agent = LLMAgent.load_checkpoint(path=agent_checkpoint_path)
