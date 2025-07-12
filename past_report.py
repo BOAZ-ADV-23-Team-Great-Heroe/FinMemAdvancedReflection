@@ -39,22 +39,19 @@ def filter_reports(
 
 
 def main(
-    ticker: df,
+    ticker: str,
     start_date: date = typer.Option(..., help="시작일 (YYYY-MM-DD)"),
     end_date: date = typer.Option(..., help="종료일 (YYYY-MM-DD)"),
 ):
     # 체크포인트 로드
-    output_path = '../data/05_model_output/nvda_4o_mini_run'
+    output_path = 'data/05_model_output/nvda_4o_mini_run'
     agent_checkpoint_path = os.path.join(output_path, "agent")
     agent = LLMAgent.load_checkpoint(path=agent_checkpoint_path)
 
-    # 전체 리포트 가져오기
     full_report: Dict[date, Any] = agent.reflection_result_series_dict
 
     # 날짜 범위로 필터링
     filtered = filter_reports(full_report, start_date, end_date)
-
-
 
 
 if __name__ == "__main__":
