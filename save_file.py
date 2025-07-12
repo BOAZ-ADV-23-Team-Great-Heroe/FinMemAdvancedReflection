@@ -2,12 +2,14 @@ import os
 import json
 import typer
 import pickle
+import toml
 import polars as pl
 from decimal import Decimal
 from puppy import LLMAgent
 from typing import Dict, Any
 from datetime import date
-
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 class CustomEncoder(json.JSONEncoder):
     """
@@ -55,9 +57,22 @@ def save_simulation_results(
         raise typer.Exit(code=1)
     
     try:
+        # 설정 파일 로드 (output_path에서 trading_symbol 추출하여 config 파일 찾기)
+        # 예: data/05_model_output/nvda_4o_mini_run -> nvda -> config/nvda_gpt_config.toml
+        trading_symbol = output_path.split('/')[-1].split('_')[0].upper()
+        config_path = f"config/{trading_symbol.lower()}_gpt_config.toml"
+        
+        if not os.path.exists(config_path):
+            print(f"⚠️ 설정 파일을 찾을 수 없습니다: {config_path}")
+            print("기본 설정으로 진행합니다...")
+            config = {}
+        else:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = toml.load(f)
+        
         # 1. 최종 에이전트 로드
         print(f"'{agent_checkpoint_path}'에서 최종 에이전트 상태를 불러옵니다...")
-        agent = LLMAgent.load_checkpoint(path=agent_checkpoint_path)
+        agent = LLMAgent.load_checkpoint(path=agent_checkpoint_path, config=config)
         print("✅ 에이전트 로드 완료!")
 
         # 2. 포트폴리오 상세 거래 내역 저장

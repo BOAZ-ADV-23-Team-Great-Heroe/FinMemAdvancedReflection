@@ -1,5 +1,5 @@
 import os
-import configparser
+import toml
 import typer
 import logging
 import pickle
@@ -13,27 +13,14 @@ from puppy import MarketEnvironment, LLMAgent
 warnings.filterwarnings("ignore")
 load_dotenv(override=True)
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    """ .ini 설정 파일을 읽어 중첩된 딕셔너리로 변환합니다. """
-    parser = configparser.ConfigParser()
-    parser.read(config_path, encoding='utf-8')
-    config_dict = {}
-    for section in parser.sections():
-        keys = section.split('.')
-        d = config_dict
-        for key in keys[:-1]:
-            d = d.setdefault(key, {})
-        d[keys[-1]] = dict(parser.items(section))
-    return config_dict
-
 def run_simulation(
     config_path: str = typer.Option(
-        "config/aapl_gpt_config.ini",
+        "config/tsla_gpt_config.toml",
         "-c", "--config",
-        help="Path to the INI configuration file."
+        help="Path to the TOML configuration file."
     ),
     market_data_path: str = typer.Option(
-        "data/03_model_input/add_filing_aapl.pkl",
+        "data/03_model_input/add_filing_tsla.pkl",
         "-m", "--market-data",
         help="Path to the market data pickle file."
     ),
@@ -48,7 +35,7 @@ def run_simulation(
         help="Simulation end date in YYYY-MM-DD format."
     ),
     output_path: str = typer.Option(
-        "result/default_run",
+        "data/05_model_output/default_run",
         "-o", "--output-path",
         help="Directory to save all checkpoints and final results. Resumes from here if checkpoints exist."
     ),
@@ -68,7 +55,8 @@ def run_simulation(
     if not logger.handlers:
         logger.addHandler(file_handler)
 
-    config = load_config(config_path)
+    with open(config_path, "r") as f:
+        config = toml.load(f)
 
     agent_checkpoint_path = os.path.join(output_path, "agent")
     env_checkpoint_path = os.path.join(output_path, "env")

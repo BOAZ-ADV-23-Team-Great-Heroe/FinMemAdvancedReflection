@@ -121,7 +121,7 @@ class LLMAgent(Agent):
         failure_context = f"Before you begin, review and learn from these recent failed trades:\n{recent_failures}\n" if recent_failures else ""
 
         recent_events_texts, _ = self.brain.query_short(
-            query="corporate actions, shareholder changes, regulatory issues, new product launch, litigation",
+            query_text="corporate actions, shareholder changes, regulatory issues, new product launch, litigation",
             top_k=2,
             symbol=self.trading_symbol
         )
@@ -163,7 +163,7 @@ class LLMAgent(Agent):
         }
         for query in persona_queries.values():
             for query_func in [self.brain.query_short, self.brain.query_mid, self.brain.query_long]:
-                texts, ids = query_func(query, self.top_k, self.trading_symbol)
+                texts, ids = query_func(query_text=query, top_k=self.top_k, symbol=self.trading_symbol)
                 for doc_id, text in zip(ids, texts):
                     retrieved_docs[doc_id] = self.truncator.truncate(text)
         

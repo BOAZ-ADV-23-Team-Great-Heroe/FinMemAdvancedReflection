@@ -4,7 +4,7 @@ set -e
 
 # --- 파라미터 설정 ---
 START_DATE=${1:-"2021-11-16"}
-END_DATE=${2:-"2025-06-11"}
+END_DATE=${2:-"2021-11-17"}
 OUTPUT_PATH=${3:-"data/05_model_output/nvda_4o_mini_run"}
 
 

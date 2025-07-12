@@ -137,6 +137,49 @@ class MemoryDB:
                     break
         return ret_text_list, ret_ids
 
+    def prepare_jump(self) -> Tuple[Dict, Dict, List[int]]:
+        jump_dict_up, jump_dict_down, id_to_remove = {}, {}, []
+        for symbol in self.universe:
+            to_jump_up = [r for r in self.universe[symbol]["score_memory"] if r["important_score"] >= self.jump_threshold_upper]
+            to_jump_down = [r for r in self.universe[symbol]["score_memory"] if r["important_score"] < self.jump_threshold_lower]
+            
+            if to_jump_up:
+                emb_list = [self.universe[symbol]["index"].reconstruct(r["id"]) for r in to_jump_up]
+                valid_embs = [emb for emb in emb_list if emb is not None]
+                if valid_embs:
+                    jump_dict_up[symbol] = {"jump_object_list": to_jump_up, "emb_list": np.vstack(valid_embs)}
+            
+            if to_jump_down:
+                emb_list = [self.universe[symbol]["index"].reconstruct(r["id"]) for r in to_jump_down]
+                valid_embs = [emb for emb in emb_list if emb is not None]
+                if valid_embs:
+                    jump_dict_down[symbol] = {"jump_object_list": to_jump_down, "emb_list": np.vstack(valid_embs)}
+            
+            ids_to_delete = [r["id"] for r in to_jump_up] + [r["id"] for r in to_jump_down]
+            if ids_to_delete:
+                id_to_remove.extend(ids_to_delete)
+                self.universe[symbol]["index"].remove_ids(np.array(ids_to_delete, dtype=np.int64))
+                self.universe[symbol]["score_memory"] = SortedList(
+                    [r for r in self.universe[symbol]["score_memory"] if r["id"] not in ids_to_delete],
+                    key=lambda x: x["important_score_recency_compound_score"]
+                )
+        return jump_dict_up, jump_dict_down, id_to_remove
+    
+
+    def accept_jump(self, jump_dict: Tuple[Dict, Dict], direction: str) -> None:
+        if direction not in ["up", "down"]: raise ValueError("direction must be 'up' or 'down'")
+        target_dict = jump_dict[0] if direction == "up" else jump_dict[1]
+        for symbol, data in target_dict.items():
+            if symbol not in self.universe: self.add_new_symbol(symbol)
+            new_ids = []
+            for obj in data["jump_object_list"]:
+                new_ids.append(obj["id"])
+                if direction == "up":
+                    obj["recency_score"] = self.recency_score_initialization_func()
+                    obj["delta"] = 0
+            self.universe[symbol]["score_memory"].update(data["jump_object_list"])
+            self.universe[symbol]["index"].add_with_ids(data["emb_list"], np.array(new_ids, dtype=np.int64))
+            
     def update_access_count_with_feed_back(self, symbol: str, ids: List[int], feedback: int) -> List[int]:
         if symbol not in self.universe: return []
         success_ids = []
@@ -274,8 +317,8 @@ class BrainDB:
                 recency_score_initialization=R_ConstantInitialization(),
                 compound_score_calculation=LinearCompoundScore(),
                 importance_score_change_access_counter=LinearImportanceScoreChange(),
-                decay_function=ExponentialDecay(**eval(layer_config["decay_params"])),
-                clean_up_threshold_dict=eval(layer_config["clean_up_threshold_dict"]),
+                decay_function=ExponentialDecay(**layer_config["decay_params"]),
+                clean_up_threshold_dict=layer_config["clean_up_threshold_dict"],
                 logger=logger,
             )
         

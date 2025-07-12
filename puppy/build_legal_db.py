@@ -19,13 +19,15 @@ from tqdm import tqdm
 
 from langchain.schema import Document
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from .embedding import OpenAILongerThanContextEmb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 # --- 1. 설정 (Configuration) ---
 DATA_PATH = './data/legal_documents/'
 DB_FAISS_PATH = "./vector_db/"
-EMBEDDING_MODEL = "jhgan/ko-sroberta-multitask"
+EMBEDDING_MODEL = "text-embedding-ada-002"
 
 def load_documents(path: str) -> list[Document]:
     """지정된 경로에서 텍스트 및 PDF 문서를 로드합니다."""
@@ -107,10 +109,10 @@ def create_and_save_vector_db(chunks: list[Document]):
     """임베딩 모델을 사용하여 벡터 DB를 생성하고 파일로 저장합니다. (메모리 최적화 버전)"""
     print("임베딩 및 벡터 DB 생성 시작...")
 
-    embeddings_model = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL,
-        model_kwargs={'device': 'cpu'}, # 👈 CPU를 사용하고 계시므로 'cpu'로 유지
-        encode_kwargs={'normalize_embeddings': True}
+    embeddings_model = OpenAILongerThanContextEmb(
+        embedding_model=EMBEDDING_MODEL,
+        chunk_size=1000,
+        verbose=False
     )
 
     # --- 👇 여기가 핵심적인 수정 부분입니다! ---
@@ -126,7 +128,12 @@ def create_and_save_vector_db(chunks: list[Document]):
         batch_texts = [doc.page_content for doc in batch_chunks]
 
         # 실제 임베딩 처리
-        batch_vectors = embeddings_model.embed_documents(batch_texts)
+        batch_vectors = []
+        for text in batch_texts:
+            vector = embeddings_model(text)
+            if hasattr(vector, 'shape') and len(vector.shape) == 2:
+                vector = vector.flatten()
+            batch_vectors.append(vector)
         all_vectors.extend(batch_vectors)
 
     print("모든 문서의 임베딩이 완료되었습니다.")
