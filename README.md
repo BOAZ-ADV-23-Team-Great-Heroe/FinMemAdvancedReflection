@@ -83,14 +83,26 @@ LLM이 가진 환각(Hallucination)의 한계를 극복하고, 실제 법률 및
 #### 1-1. Conda 가상환경 생성 (최초 1회)
 프로젝트에 필요한 모든 라이브러리가 포함된 Conda 가상환경을 생성합니다. 이 명령어는 프로젝트 설정 시 **한 번만 실행**하면 됩니다.
 
+<<<<<<< HEAD
 ```bash
 # myenv.yml 파일로부터 가상환경을 생성합니다.
 # 패키지 다운로드로 인해 시간이 다소 소요될 수 있습니다.
 conda env create -f myenv.yml
 ````
+=======
+    ```bash
+    # 1. myenv.yml 파일로 가상 환경 생성
+    conda env create -f myenv.yml
+    
+    # 2. 생성된 가상 환경 활성화
+    conda activate finmem310
+
+    ```
+>>>>>>> fa0701d (last)
 
 #### 1-2. 환경 활성화 및 필수 라이브러리 설치
 
+<<<<<<< HEAD
 터미널을 새로 열 때마다 아래 명령어를 순서대로 실행하여, 가상환경을 활성화하고 RAG 기능에 필요한 라이브러리를 설치합니다.
 
 ```bash
@@ -109,6 +121,14 @@ pip install langchain-openai
 # .env 파일에 들어갈 내용
 OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
+=======
+    또한, Huggingface token을 HF_TOKEN으로 사용합니다.
+    STOCKNEWSAPI_API_KEY도 사용합니다.
+
+    ```
+    OPENAI_API_KEY="sk-..."
+    ```
+>>>>>>> fa0701d (last)
 
 ### 2단계: RAG 벡터 DB 구축
 
