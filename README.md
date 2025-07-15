@@ -86,7 +86,10 @@ LLM이 가진 환각(Hallucination)의 한계를 극복하고, 실제 법률 및
     conda env create -f myenv.yml
     
     # 2. 생성된 가상 환경 활성화
-    conda activate finmem310
+    conda activate legal_finmem
+
+    # 3. RAG 기능에 필요한 langchain-openai 패키지 설치
+    pip install langchain-openai
     ```
 
 2.  **API 키 설정**:
@@ -121,10 +124,24 @@ LLM이 가진 환각(Hallucination)의 한계를 극복하고, 실제 법률 및
 
 1.  **Config 파일 수정**:
     - `config/` 폴더 안의 `.toml` 파일을 열어 분석할 종목의 `system_message`, `trading_symbol` 등을 수정합니다.
+     - `run_openai.sh/` 파일 수정: 스크립트 상단의 `CONFIG_FILE`, `MARKET_DATA_FILE`, `OUTPUT_PATH ` 변수를 아래와 같이 `aapl`용으로 변경합니다.
+     ```bash
+    # run_openai.sh 파일 상단
+    CONFIG_FILE="config/aapl_gpt_config.toml"
+    MARKET_DATA_FILE="data/03_model_input/add_filing_aapl.pkl"
+    OUTPUT_PATH=${3:-"data/05_model_output/aapl_4o_mini_run"}
+    ```
 
 2.  **스크립트 실행**:
     - 터미널에서 아래 명령어를 실행합니다.
+    - 이전 결과 삭제 및 실행: 수정한 스크립트를 저장하고, 터미널에서 아래 명령어들을 실행합니다.
+    ```bash
+    # 이전 AAPL 결과 폴더가 있다면 삭제하여 깨끗하게 시작
+    rm -rf data/05_model_output/aapl_4o_mini_run
 
+    # AAPL 시뮬레이션 실행
+    bash run_openai.sh
+    ```
     ```bash
     # 기본 설정으로 실행 (스크립트 내부에 정의된 값 사용)
     ./run_openai.sh
@@ -138,15 +155,29 @@ LLM이 가진 환각(Hallucination)의 한계를 극복하고, 실제 법률 및
 ### 4단계: 결과 확인 및 분석
 
 1.  **리포트 생성**:
-    - 시뮬레이션이 완료되면, `save_file.py`를 사용하여 포트폴리오 내역, 성과 지표, 전체 분석 리포트 등 3개의 결과 파일을 생성합니다.
+    - `run_openai.sh`스크립트가 시뮬레이션 후 자동으로 결과물 생성을 실행합니다. 만약 수동으로 특정 종목의 결과만 다시 생성하고 싶다면 아래와 같이 실행합니다.
+    - 
 
     ```bash
-    python save_file.py --output-path data/05_model_output/my_nvda_run
+    p# 예시: AAPL 결과 리포트만 다시 생성
+    python save_file.py --output-path data/05_model_output/aapl_4o_mini_run
     ```
 
-2.  **상세 분석 (Jupyter Notebook)**:
-    - **`note_book.ipynb`** 파일을 열어, 방금 생성된 결과 파일들을 시각화하고 심층적으로 분석할 수 있습니다.
-    - 이 노트북을 통해 에이전트의 일별 자산 변화, 거래 내역, 그리고 각 시점의 의사결정 과정을 상세히 추적하고 평가할 수 있습니다.
+2.  **과정 검증 (로그 분석):**:
+    - AI 에이전트의 상세 행동 로그(`data/04_model_output_log/`)에서 RAG 관련 로그가 제대로 기록되었는지 확인합니다.
+    ```bash
+    # 예시: AAPL 에이전트의 로그에서 'Compliance' 관련 기록 확인
+    grep "Compliance" data/04_model_output_log/aapl_run.log
+    ```
+3.  **영향력 분석 (최종 보고서 확인):**:
+   - 생성된 `[종목명]_full_report_4o_mini.json` 파일을 열어 RAG의 실제 영향력을 분석합니다.
+   - `initial_context` 이 항목에 `[Fundamental Principles]`와 `[Specific Clauses]`가 포함되어 있는지 확인하여, 법률 문서 검색이 잘 되었는지 검증합니다.
+   - `primary_reason`: 이 항목에 `initial_context`에 있던 법률 내용이나 규제 리스크가 언급되는지 확인하여, RAG가 최종 의사결정에 실질적인 영향을 미쳤는지 평가합니다.
+
+4.  **시각화 및 심층 분석 (Jupyter Notebook)**:
+   - `note_book.ipynb` 파일을 열어, 생성된 결과 파일들을 시각화하고 심층적으로 분석할 수 있습니다.
+   - 이 노트북을 통해 에이전트의 일별 자산 변화, 거래 내역, 그리고 각 시점의 의사결정 과정을 상세히 추적하고 평가할 수 있습니다.
+
 
 ---
 
