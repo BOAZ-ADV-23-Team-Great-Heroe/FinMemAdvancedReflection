@@ -1,6 +1,6 @@
 # project/Dockerfile
 # Python 3.9 버전의 슬림(경량) Debian 이미지를 기반으로 사용합니다.
-FROM python:3.9-slim-buster
+FROM python:3.10.17
 
 # 컨테이너 내에서 애플리케이션 작업 디렉토리를 /app으로 설정합니다.
 WORKDIR /app

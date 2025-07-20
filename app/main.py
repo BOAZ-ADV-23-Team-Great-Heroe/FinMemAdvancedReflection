@@ -7,7 +7,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://https://boaz-adv-23-team-great-heroe.github.io/o"],
+    allow_origins=["https://https://boaz-adv-23-team-great-heroe.github.io"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
