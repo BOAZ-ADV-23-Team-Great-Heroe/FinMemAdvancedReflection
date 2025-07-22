@@ -199,10 +199,10 @@ LLM이 가진 환각(Hallucination)의 한계를 극대화하고, 실제 법률 
 
 | 이름 (Name) | 학교/전공 (Affiliation) | GitHub / Contact |
 | :--- | :--- | :--- |
-| **박지원** | 동국대학교 컴퓨터공학과 | [jwon4176](https://github.com/jwon4176) |
+| **박지원** | 동국대학교 컴퓨터공학과 | [jwon4178]([https://github.com/jwon4178](https://github.com/jiwon4178)) |
 | **오영민** | 연세대학교 통계학과 | [cjmin2001.github.io](https://cjmin2001.github.io/) |
-| **김강민** | 세종대학교 인공지능학과 | [withmeoohao](https://github.com/withmeoohao) |
-| **정한결** | 국민대학교 소프트웨어학과 | [LinkedIn](https://www.linkedin.com/in/hajungJJJ) |
+| **김강민** | 세종대학교 인공지능학과 | [withmochaa]([https://github.com/withmochaa](https://github.com/withmochaa)) |
+| **정한결** | 국민대학교 소프트웨어학과 | [LinkedIn](https://www.linkedin.com/in/hkjung1123/) |
 
 ---
 
