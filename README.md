@@ -5,6 +5,9 @@
 
 이 프로젝트는 기존 FinMem의 아이디어를 바탕으로, LLM의 추론 능력을 극대화하는 새로운 아키텍처를 설계하여 완전히 새로운 차원의 의사결정 시스템을 구현했습니다.
 
+[프로젝트 상세 정보 및 협업 안내](https://oval-alligator-fbf.notion.site/TEAM-2216710199ab808aaebcf9f07ef61643)
+
+
 ---
 
 ## 🚀 핵심 개선점 (Key Features)
